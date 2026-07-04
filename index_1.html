@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>動画プレイヤー</title>
+<style>
+  :root {
+    color-scheme: light;
+  }
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #f2f2f5;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Hiragino Sans", sans-serif;
+    overscroll-behavior: none;
+  }
+  .container {
+    height: 100vh;
+    height: -webkit-fill-available;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 16px 10px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: #222;
+  }
+  .grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 12px;
+    padding: 8px 14px 16px;
+    min-height: 0;
+  }
+  .thumb {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #000;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    transition: transform 0.12s ease;
+  }
+  .thumb:active {
+    transform: scale(0.96);
+  }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .thumb .play-badge {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 46px;
+    height: 46px;
+    background: rgba(0,0,0,0.55);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .thumb .play-badge::after {
+    content: "";
+    border-style: solid;
+    border-width: 10px 0 10px 16px;
+    border-color: transparent transparent transparent #fff;
+    margin-left: 3px;
+  }
+  .thumb .label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 6px 8px 5px;
+    font-size: 13px;
+    color: #fff;
+    background: linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0));
+  }
+  .thumb .edit-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: #fff;
+    z-index: 2;
+  }
+  .thumb.empty {
+    background: #dcdce2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .thumb.empty .empty-text {
+    color: #8a8a92;
+    font-size: 13px;
+    text-align: center;
+    padding: 0 8px;
+  }
+
+  /* URL入力モーダル */
+  .edit-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100;
+    padding: 20px;
+  }
+  .edit-overlay.active {
+    display: flex;
+  }
+  .edit-box {
+    background: #fff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 420px;
+    padding: 20px;
+  }
+  .edit-box h2 {
+    margin: 0 0 12px;
+    font-size: 16px;
+    color: #222;
+  }
+  .edit-box input {
+    width: 100%;
+    padding: 12px 12px;
+    font-size: 15px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+  }
+  .edit-box .err {
+    color: #d33;
+    font-size: 13px;
+    margin-top: 8px;
+    min-height: 18px;
+  }
+  .edit-box .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .edit-box button {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .edit-box .btn-cancel {
+    background: #eee;
+    color: #444;
+  }
+  .edit-box .btn-save {
+    background: #2a7fff;
+    color: #fff;
+  }
+
+  /* 再生モーダル */
+  .player-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.92);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .player-overlay.active {
+    display: flex;
+  }
+  .player-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+  }
+  .player-frame-box {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+  }
+  .player-frame-box iframe {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+  .close-btn {
+    position: absolute;
+    top: -46px;
+    right: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: none;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  @media (orientation: landscape) and (max-height: 500px) {
+    header { padding: 6px; }
+    header h1 { font-size: 16px; }
+    .grid { gap: 8px; padding: 4px 8px 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>動画プレイヤー</h1>
+  </header>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="edit-overlay" id="editOverlay">
+  <div class="edit-box">
+    <h2>YouTubeのURLを貼り付けてください</h2>
+    <input type="url" id="urlInput" placeholder="https://youtu.be/xxxxxxxxxxx" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <div class="err" id="urlError"></div>
+    <div class="btn-row">
+      <button class="btn-cancel" id="editCancelBtn">キャンセル</button>
+      <button class="btn-save" id="editSaveBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="player-overlay" id="playerOverlay">
+  <div class="player-wrap">
+    <button class="close-btn" id="closeBtn" aria-label="閉じる">✕</button>
+    <div class="player-frame-box">
+      <iframe id="playerFrame"
+        src=""
+        title="YouTube video player"
+        frameborder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen>
+      </iframe>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 動画リスト（VIDEO_ID, ラベル）※差し替え可能
+  const videos = [
+    { id: "tNrNzF6xVN8", label: "動画 1" },
+    { id: "sr--GVIoluU", label: "動画 2" },
+    { id: "HFLyX1JxCqQ", label: "動画 3" },
+    { id: "T0valuAksuo", label: "動画 4" },
+    { id: "iiKwrfXIqgc", label: "動画 5" },
+    { id: "Jg_rBMmzW1I", label: "動画 6" },
+  ];
+
+  const grid = document.getElementById('grid');
+  const overlay = document.getElementById('playerOverlay');
+  const frame = document.getElementById('playerFrame');
+  const closeBtn = document.getElementById('closeBtn');
+
+  const editOverlay = document.getElementById('editOverlay');
+  const urlInput = document.getElementById('urlInput');
+  const urlError = document.getElementById('urlError');
+  const editSaveBtn = document.getElementById('editSaveBtn');
+  const editCancelBtn = document.getElementById('editCancelBtn');
+
+  let editingIndex = null;
+
+  function renderGrid() {
+    grid.innerHTML = '';
+    videos.forEach((v, i) => {
+      const div = document.createElement('div');
+      if (v.id) {
+        div.className = 'thumb';
+        div.innerHTML = `
+          <img src="https://img.youtube.com/vi/${v.id}/hqdefault.jpg" alt="${v.label}" loading="lazy">
+          <div class="play-badge"></div>
+          <div class="label">${v.label}</div>
+          <div class="edit-btn" data-index="${i}">✎</div>
+        `;
+        div.querySelector('img').addEventListener('click', () => openPlayer(v.id));
+        div.querySelector('.play-badge').addEventListener('click', () => openPlayer(v.id));
+        div.querySelector('.label').addEventListener('click', () => openPlayer(v.id));
+      } else {
+        div.className = 'thumb empty';
+        div.innerHTML = `
+          <div class="empty-text">タップして<br>URLを追加</div>
+          <div class="edit-btn" data-index="${i}">✎</div>
+        `;
+        div.addEventListener('click', (e) => {
+          if (!e.target.classList.contains('edit-btn')) openEditModal(i);
+        });
+      }
+      const editBtn = div.querySelector('.edit-btn');
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openEditModal(i);
+      });
+      grid.appendChild(div);
+    });
+  }
+
+  function parseYouTubeId(raw) {
+    const input = raw.trim();
+    // 11文字の動画IDがそのまま貼られた場合
+    if (/^[a-zA-Z0-9_-]{11}$/.test(input)) return input;
+    try {
+      const u = new URL(input);
+      const host = u.hostname.replace(/^www\./, '');
+      if (host === 'youtu.be') {
+        const id = u.pathname.split('/').filter(Boolean)[0];
+        if (id) return id;
+      }
+      if (host === 'youtube.com' || host === 'm.youtube.com') {
+        if (u.searchParams.get('v')) return u.searchParams.get('v');
+        const parts = u.pathname.split('/').filter(Boolean);
+        const idx = parts.findIndex(p => p === 'embed' || p === 'shorts' || p === 'live');
+        if (idx !== -1 && parts[idx + 1]) return parts[idx + 1];
+      }
+    } catch (e) {
+      // URLとして不正
+    }
+    return null;
+  }
+
+  function openEditModal(index) {
+    editingIndex = index;
+    urlInput.value = '';
+    urlError.textContent = '';
+    editOverlay.classList.add('active');
+    setTimeout(() => urlInput.focus(), 100);
+  }
+
+  function closeEditModal() {
+    editOverlay.classList.remove('active');
+    editingIndex = null;
+  }
+
+  async function saveEdit() {
+    const id = parseYouTubeId(urlInput.value);
+    if (!id) {
+      urlError.textContent = '有効なYouTubeのURLではないようです。もう一度ご確認ください。';
+      return;
+    }
+    videos[editingIndex].id = id;
+    videos[editingIndex].label = `動画 ${editingIndex + 1}`;
+    closeEditModal();
+    renderGrid();
+
+    // 可能であればタイトルを自動取得してラベルに反映（失敗しても無視）
+    try {
+      const res = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${id}&format=json`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.title) {
+          videos.find(v => v.id === id).label = data.title;
+          renderGrid();
+        }
+      }
+    } catch (e) {
+      // タイトル取得に失敗した場合はそのまま「動画N」を表示
+    }
+  }
+
+  editSaveBtn.addEventListener('click', saveEdit);
+  editCancelBtn.addEventListener('click', closeEditModal);
+  editOverlay.addEventListener('click', (e) => {
+    if (e.target === editOverlay) closeEditModal();
+  });
+  urlInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveEdit();
+  });
+
+  function openPlayer(id) {
+    frame.src = `https://www.youtube.com/embed/${id}?autoplay=1&playsinline=1&rel=0`;
+    overlay.classList.add('active');
+  }
+
+  function closePlayer() {
+    overlay.classList.remove('active');
+    frame.src = "";
+  }
+
+  closeBtn.addEventListener('click', closePlayer);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closePlayer();
+  });
+
+  renderGrid();
+</script>
+</body>
+</html>
